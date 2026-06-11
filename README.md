@@ -75,12 +75,83 @@ news-analyzer/
 ├── README.md
 ├── .gitignore
 ├── requirements.txt
+├── Dockerfile
 ├── docker-compose.yml
-├── clustering.py         # алгоритм кластеризации
-├── ranking.py            # алгоритм тональности
-├── prompt_db_fixer.md    # промпт для LLM
-├── sample_news.json      # тестовые данные
-└── tests/                # юнит-тесты
+├── main.py                # FastAPI приложение
+├── clustering.py          # алгоритм кластеризации
+├── ranking.py             # алгоритм тональности
+├── prompt_db_fixer.md     # промпт для LLM
+├── sample_news.json       # тестовые данные
+└── tests/                 # юнит-тесты (опционально)
 ```
 
-Далее следуют реализации алгоритмов (clustering.py, ranking.py) и промпт.
+## Запуск прототипа
+
+### Локальный запуск (без Docker)
+
+1. Установите зависимости:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Проверьте кластеризацию:
+   ```bash
+   python clustering.py
+   ```
+
+3. Проверьте тональность:
+   ```bash
+   python ranking.py
+   ```
+
+### Запуск с Docker (полный стек)
+
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/kalikrit/news-analyzer.git
+   cd news-analyzer
+   ```
+
+2. Запустите все сервисы:
+   ```bash
+   docker-compose up --build
+   ```
+
+3. API будет доступно по адресу: [http://localhost:8000](http://localhost:8000)
+
+4. Откройте документацию Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Пример запроса к API
+
+```bash
+curl -X POST "http://localhost:8000/analyze" \
+     -H "Content-Type: application/json" \
+     -d '[
+           {"title": "Газпром открыл месторождение", "description": "Инвестиции в ЯНАО"},
+           {"title": "Сбербанк запустил AI-помощника", "description": "Технологии для бизнеса"}
+         ]'
+```
+
+Пример ответа:
+```json
+{
+  "results": [
+    {
+      "title": "Газпром открыл месторождение",
+      "cluster_id": 0,
+      "sentiment": {"score": 0.72, "label": "positive", "confidence": 0.89}
+    },
+    {
+      "title": "Сбербанк запустил AI-помощника",
+      "cluster_id": -1,
+      "sentiment": {"score": 0.55, "label": "positive", "confidence": 0.78}
+    }
+  ]
+}
+```
+
+## Примечания
+
+- В текущей версии кластеризация выполняется каждый раз заново на переданном наборе новостей. Для постоянного обновления необходима база данных.
+- Модель RuBERT загружается при первом вызове `SentimentRanker` (может занять 1–2 минуты).
+- Промпт `prompt_db_fixer.md` предназначен для LLM-агента, автоматически исправляющего ошибки транзакций PostgreSQL.
