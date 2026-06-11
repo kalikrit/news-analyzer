@@ -3,16 +3,18 @@
 Использует RuBERT или простой rule-based fallback.
 """
 
-from typing import Dict, Tuple
+from typing import Dict
 import re
 
+# Пытаемся импортировать torch и transformers, но не падаем при их отсутствии
 try:
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
     import torch
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    print("Warning: transformers not installed. Install with: pip install torch transformers")
+    torch = None
+    print("Warning: transformers/torch not installed. Install with: pip install torch transformers")
 
 
 class SentimentRanker:
@@ -22,7 +24,7 @@ class SentimentRanker:
         self.model_name = model_name
         self.model = None
         self.tokenizer = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         self._load_model()
 
         # Словарь простых эмоциональных слов (fallback)
@@ -34,7 +36,9 @@ class SentimentRanker:
             try:
                 self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
                 self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
-                self.model.to(self.device)
+                if torch and torch.cuda.is_available():
+                    self.device = "cuda"
+                    self.model.to(self.device)
                 self.model.eval()
             except Exception as e:
                 print(f"Failed to load RuBERT model: {e}. Using fallback.")
@@ -64,9 +68,7 @@ class SentimentRanker:
         with torch.no_grad():
             outputs = self.model(**inputs)
             probs = torch.softmax(outputs.logits, dim=1).cpu().numpy()[0]
-        # Предполагаем порядок классов: 0 - негатив, 1 - нейтраль, 2 - позитив (зависит от модели)
-        # Для модели blanchefort/rubert-base-cased-sentiment: негатив=0, нейтраль=1, позитив=2
-        neg, neu, pos = probs[0], probs[1], probs[2]
+        neg, neu, pos = probs[0], probs[1], probs[2]  # порядок: негатив, нейтраль, позитив
         score = (pos - neg)  # от -1 до +1
         if score > 0.3:
             label = 'positive'
@@ -86,7 +88,6 @@ class SentimentRanker:
             score = 0.0
         else:
             score = (pos_count - neg_count) / total
-        # Ограничиваем от -1 до +1
         score = max(-1.0, min(1.0, score))
         if score > 0.3:
             label = 'positive'
